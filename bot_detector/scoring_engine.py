@@ -3,7 +3,7 @@ Bot Scoring Engine for CommentGuard AI.
 Calculates transparent 0-100 bot scores based on weighted behavioral,
 metadata, and linguistic signals.
 """
-
+from collections import defaultdict
 from datetime import datetime, timezone
 import re
 import difflib
@@ -52,25 +52,56 @@ def text_similarity(text1, text2):
         return 1.0
     return difflib.SequenceMatcher(None, norm1, norm2).ratio()
 
-
 def calculate_duplicate_matrix(comments):
     """
     Computes text similarity across all comments in the batch.
+    Uses length-bucketing and quick_ratio() pre-filtering to avoid
+    a full O(n^2) SequenceMatcher pass on large comment batches.
     Returns a mapping of comment_id -> list of (other_comment_id, similarity_score).
     """
     duplicates_map = {c["comment_id"]: [] for c in comments}
-    n = len(comments)
+    normalized = [normalize_text_for_comparison(c.get("comment_text", "")) for c in comments]
 
-    for i in range(n):
-        c1 = comments[i]
-        id1 = c1["comment_id"]
-        for j in range(i + 1, n):
-            c2 = comments[j]
-            id2 = c2["comment_id"]
-            sim = text_similarity(c1.get("comment_text", ""), c2.get("comment_text", ""))
-            if sim >= 0.70:
-                duplicates_map[id1].append({"id": id2, "author": c2.get("author_name"), "sim": round(sim, 2)})
-                duplicates_map[id2].append({"id": id1, "author": c1.get("author_name"), "sim": round(sim, 2)})
+    SIM_THRESHOLD = 0.70
+    BUCKET_SIZE = 10  # group comments by normalized length, in chunks of 10 chars
+
+    buckets = defaultdict(list)
+    for i, norm in enumerate(normalized):
+        if norm:
+            buckets[len(norm) // BUCKET_SIZE].append(i)
+
+    checked_pairs = set()
+
+    for bucket_key, idxs in buckets.items():
+        # Compare within this bucket AND the next one up (catches near-length-boundary matches)
+        candidates = idxs + buckets.get(bucket_key + 1, [])
+        for i in idxs:
+            for j in candidates:
+                if j <= i:
+                    continue
+                pair = (i, j)
+                if pair in checked_pairs:
+                    continue
+                checked_pairs.add(pair)
+
+                norm1, norm2 = normalized[i], normalized[j]
+                if not norm1 or not norm2:
+                    continue
+                if norm1 == norm2:
+                    sim = 1.0
+                else:
+                    matcher = difflib.SequenceMatcher(None, norm1, norm2)
+                    # Fast upper-bound check — skip the expensive ratio() call
+                    # entirely if it can't possibly clear the threshold
+                    if matcher.quick_ratio() < SIM_THRESHOLD:
+                        continue
+                    sim = matcher.ratio()
+
+                if sim >= SIM_THRESHOLD:
+                    c1, c2 = comments[i], comments[j]
+                    id1, id2 = c1["comment_id"], c2["comment_id"]
+                    duplicates_map[id1].append({"id": id2, "author": c2.get("author_name"), "sim": round(sim, 2)})
+                    duplicates_map[id2].append({"id": id1, "author": c1.get("author_name"), "sim": round(sim, 2)})
 
     return duplicates_map
 
