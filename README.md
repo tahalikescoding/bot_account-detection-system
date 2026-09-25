@@ -1,6 +1,9 @@
 # CommentGuard AI 🛡️
 
-**CommentGuard AI** is an advanced bot account detection and security operations (SOC) dashboard tailored for YouTube content creators and community moderators. It analyzes video comment sections in real-time, identifies likely bot accounts and coordinated Sybil campaigns, and provides transparent forensic explanations for every flagged account.
+**CommentGuard AI** is an advanced bot account detection and security operations (SOC) dashboard for YouTube content creators and community moderators. It analyzes video comment sections in real-time, identifies likely bot accounts and coordinated Sybil campaigns, and provides transparent forensic explanations for every flagged account — helping creators moderate spam, scam links, and coordinated attacks without manually sifting through hundreds of comments.
+
+🔗 **Live Demo**: [https://bot-account-detection-sysrem-1.onrender.com](https://bot-account-detection-sysrem-1.onrender.com)
+> Hosted on Render's free tier — the first load may take 30–50 seconds if the instance has spun down from inactivity.
 
 ---
 
@@ -8,7 +11,7 @@
 
 ### 1. YouTube Data API v3 & Realistic Offline Demo Fallback
 - Paste any YouTube video URL or ID (e.g. `https://www.youtube.com/watch?v=...` or `https://youtu.be/...`).
-- Optional YouTube Data API v3 key integration.
+- Optional YouTube Data API v3 key integration for live comment fetching.
 - Intelligent fallback to curated, realistic mock datasets (`Crypto Scam Surge`, `Tech Review Raid`, `Clean Baseline`) so the dashboard works completely offline without an internet connection or API quota limits.
 
 ### 2. Multi-Signal Weighted Bot Scoring Engine (0 - 100)
@@ -71,15 +74,17 @@ Simulate live bot attacks on command without waiting for real bots:
 
 ## 🛠️ Architecture & Tech Stack
 
-- **Backend**: Python 3.14 + Flask
+- **Backend**: Python 3.14 + Flask, served in production via Gunicorn
 - **Frontend**: Vanilla HTML5, Vanilla CSS3 (Custom Dark SOC Theme, Glassmorphism, CSS Grid & Flexbox), Vanilla JavaScript (Modular ES6)
 - **Data Layer**: YouTube Data API v3 + Built-in Realistic Mock Data Presets
+- **Deployment**: Render (free tier, auto-deploys from GitHub `main` branch)
 
-```
-bot_account detection sysrem/
+```text
+bot_account-detection-system/
 │
 ├── app.py                     # Flask server and REST API endpoints
 ├── requirements.txt           # Python dependencies
+├── Procfile                   # Gunicorn start command for deployment
 ├── README.md                  # System documentation
 │
 ├── bot_detector/
@@ -107,17 +112,35 @@ bot_account detection sysrem/
 
 ## 💻 Running Locally
 
-1. **Activate environment / Install dependencies**:
-   ```bash
-   pip install -r requirements.txt
-   ```
+1. **Clone the repo and install dependencies**:
+```bash
+git clone https://github.com/tahalikescoding/bot_account-detection-system.git
+cd bot_account-detection-system
+pip install -r requirements.txt
+```
 
-2. **Start the application**:
-   ```bash
-   python app.py
-   ```
+2. **(Optional) Set a YouTube Data API v3 key** if you want live comment fetching instead of the demo presets:
+```bash
+export YOUTUBE_API_KEY=your_api_key_here      # macOS/Linux
+set YOUTUBE_API_KEY=your_api_key_here          # Windows (cmd)
+```
+Without this, the app still works fully using built-in demo presets and a real-time scraping fallback.
 
-3. **Open in browser**:
-   Navigate to [http://127.0.0.1:5000](http://127.0.0.1:5000).
+3. **Start the application**:
+```bash
+python app.py
+```
+
+4. **Open in browser**:
+Navigate to [http://127.0.0.1:5000](http://127.0.0.1:5000).
 
 The dashboard will automatically boot up with the **Crypto Scam Surge** demo preset pre-loaded so you can explore all features immediately.
+
+---
+
+## ☁️ Deployment
+
+This project is deployed on **Render** using:
+- **Build Command**: `pip install -r requirements.txt`
+- **Start Command**: `gunicorn app:app`
+- **Environment Variable**: `YOUTUBE_API_KEY` (optional — enables live YouTube comment analysis; without it, the app uses realistic demo/mock data)
