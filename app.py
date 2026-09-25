@@ -40,7 +40,7 @@ def analyze_comments():
     """
     data = request.get_json() or {}
     url = data.get("url", "").strip()
-    api_key = data.get("api_key", "").strip()
+    api_key = data.get("api_key", "").strip() or os.environ.get("YOUTUBE_API_KEY", "")
     preset = data.get("preset", "crypto_attack")
     # max_comments=0 means fetch ALL (up to the 2000 safety ceiling)
     raw_max = data.get("max_comments", 0)
