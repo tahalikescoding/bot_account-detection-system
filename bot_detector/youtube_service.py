@@ -208,7 +208,7 @@ def fetch_youtube_api_comments(video_id, api_key, max_results=100):
             params={
                 "part": "snippet",
                 "videoId": video_id,
-                "maxResults": min(max_results, 100),
+                "maxResults": min(max_results, 100) if max_results and max_results > 0 else 100,
                 "textFormat": "plainText",
                 "order": "time",
                 "key": api_key
