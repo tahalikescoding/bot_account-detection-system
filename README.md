@@ -1,5 +1,11 @@
 # CommentGuard AI 🛡️
 
+## Contributors
+### 1.Mohammed Taha Hakim mohdtaha_h@hotmail.com @tahalikescoding
+### 2.Shikhar Saini shikharsaini2408@gmail.com @Pestboi99
+### 3.Muhammed Sahil msahilstack@gmail.com @msahilquant
+### 4.Harshit Srivastava f20260233@dubai.bits-pilani.ac.in @HarshitSrivastava0951
+
 **CommentGuard AI** is an advanced bot account detection and security operations (SOC) dashboard for YouTube content creators and community moderators. It analyzes video comment sections in real-time, identifies likely bot accounts and coordinated Sybil campaigns, and provides transparent forensic explanations for every flagged account — helping creators moderate spam, scam links, and coordinated attacks without manually sifting through hundreds of comments.
 
 🔗 **Live Demo**: [https://bot-account-detection-sysrem-1.onrender.com](https://bot-account-detection-sysrem-1.onrender.com)
