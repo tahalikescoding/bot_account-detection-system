@@ -112,68 +112,10 @@ def parse_relative_time(time_str):
 MAX_COMMENTS_CEILING = 2000
 
 
-def fetch_real_comments(video_id, max_results=0):
-    """
-    Fetches ALL YouTube comments without an API key using youtube-comment-downloader.
-    max_results=0 means no limit (up to MAX_COMMENTS_CEILING).
-    Returns a list of normalized comment dicts ready for the scoring engine.
-    """
-    from youtube_comment_downloader import YoutubeCommentDownloader, SORT_BY_RECENT
-
-    video_url = f"https://www.youtube.com/watch?v={video_id}"
-    video_info = fetch_video_metadata_oembed(video_id)
-    video_published_at = video_info["published_at"]
-
-    downloader = YoutubeCommentDownloader()
-
-    # Use the ceiling: if user sets a custom limit use that, otherwise fetch all up to ceiling
-    limit = max_results if max_results and max_results > 0 else MAX_COMMENTS_CEILING
-    raw = list(islice(
-        downloader.get_comments_from_url(video_url, sort_by=SORT_BY_RECENT),
-        limit
-    ))
-
-    comments = []
-    for idx, c in enumerate(raw):
-        author_name = c.get("author", "Anonymous")
-        channel_id = c.get("channel", "")
-        avatar_url = c.get("photo") or AVATAR_BOT_DEFAULT
-        comment_text = c.get("text", "")
-        time_str = c.get("time", "")
-        votes = c.get("votes", 0)
-        cid = c.get("cid") or f"scraped_{idx}"
-
-        published_at = parse_relative_time(time_str)
-        if not published_at:
-            # If we can't parse, assume it was posted within the hour to be safe
-            published_at = (datetime.now(timezone.utc) - timedelta(minutes=idx * 2)).isoformat()
-
-        has_default = is_default_youtube_avatar(avatar_url)
-
-        # Build handle from channel ID or author name
-        handle = f"@{re.sub(r'[^a-zA-Z0-9_]', '', author_name.lower())}"
-
-        comments.append({
-            "comment_id": cid,
-            "author_name": author_name,
-            "author_handle": handle,
-            "author_channel_id": channel_id,
-            "author_avatar": avatar_url,
-            "has_default_avatar": has_default,
-            "account_created_at": None,  # Not available from scraper
-            "comment_text": comment_text,
-            "published_at": published_at,
-            "video_published_at": video_published_at,
-            "like_count": votes,
-            "is_reply": c.get("reply", False),
-        })
-
-    return video_info, comments
-
-
 def fetch_youtube_api_comments(video_id, api_key, max_results=100):
     """
     Fetches comments via YouTube Data API v3 (requires a valid API key).
+    Paginates through multiple pages to fetch more than 100 comments.
     """
     try:
         # Fetch video metadata
@@ -202,46 +144,58 @@ def fetch_youtube_api_comments(video_id, api_key, max_results=100):
             "thumbnail": snippet.get("thumbnails", {}).get("high", {}).get("url", ""),
         }
 
-        # Fetch comments
-        c_resp = requests.get(
-            "https://www.googleapis.com/youtube/v3/commentThreads",
-            params={
+        # Fetch comments, paginating until we hit the limit or run out of pages
+        target = max_results if max_results and max_results > 0 else MAX_COMMENTS_CEILING
+        comments = []
+        page_token = None
+
+        while len(comments) < target:
+            params = {
                 "part": "snippet",
                 "videoId": video_id,
-                "maxResults": min(max_results, 100) if max_results and max_results > 0 else 100,
+                "maxResults": min(target - len(comments), 100),
                 "textFormat": "plainText",
                 "order": "time",
                 "key": api_key
-            },
-            timeout=10
-        )
-        if c_resp.status_code != 200:
-            raise Exception(f"YouTube Comments API returned {c_resp.status_code}")
+            }
+            if page_token:
+                params["pageToken"] = page_token
 
-        comments = []
-        for item in c_resp.json().get("items", []):
-            top = item.get("snippet", {}).get("topLevelComment", {}).get("snippet", {})
-            avatar = top.get("authorProfileImageUrl", "")
-            comments.append({
-                "comment_id": item.get("id"),
-                "author_name": top.get("authorDisplayName", "Anonymous"),
-                "author_handle": f"@{top.get('authorDisplayName', '').lower().replace(' ', '')}",
-                "author_channel_id": top.get("authorChannelId", {}).get("value", ""),
-                "author_avatar": avatar or AVATAR_BOT_DEFAULT,
-                "has_default_avatar": is_default_youtube_avatar(avatar),
-                "account_created_at": None,
-                "comment_text": top.get("textDisplay", ""),
-                "published_at": top.get("publishedAt"),
-                "video_published_at": video_info["published_at"],
-                "like_count": top.get("likeCount", 0),
-                "is_reply": False,
-            })
+            c_resp = requests.get(
+                "https://www.googleapis.com/youtube/v3/commentThreads",
+                params=params,
+                timeout=10
+            )
+            if c_resp.status_code != 200:
+                raise Exception(f"YouTube Comments API returned {c_resp.status_code}")
+
+            payload = c_resp.json()
+            for item in payload.get("items", []):
+                top = item.get("snippet", {}).get("topLevelComment", {}).get("snippet", {})
+                avatar = top.get("authorProfileImageUrl", "")
+                comments.append({
+                    "comment_id": item.get("id"),
+                    "author_name": top.get("authorDisplayName", "Anonymous"),
+                    "author_handle": f"@{top.get('authorDisplayName', '').lower().replace(' ', '')}",
+                    "author_channel_id": top.get("authorChannelId", {}).get("value", ""),
+                    "author_avatar": avatar or AVATAR_BOT_DEFAULT,
+                    "has_default_avatar": is_default_youtube_avatar(avatar),
+                    "account_created_at": None,
+                    "comment_text": top.get("textDisplay", ""),
+                    "published_at": top.get("publishedAt"),
+                    "video_published_at": video_info["published_at"],
+                    "like_count": top.get("likeCount", 0),
+                    "is_reply": False,
+                })
+
+            page_token = payload.get("nextPageToken")
+            if not page_token:
+                break  # no more pages available
 
         return video_info, comments
 
     except Exception as e:
         raise Exception(str(e))
-
 
 def fetch_youtube_comments(video_id=None, api_key=None, max_results=100):
     """
