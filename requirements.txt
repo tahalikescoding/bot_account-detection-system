@@ -4,3 +4,4 @@ scikit-learn>=1.4.0
 numpy>=1.26.0
 youtube-comment-downloader>=0.1.83
 dateparser>=1.1.0
+gunicorn>=21.2.0
