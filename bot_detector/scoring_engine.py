@@ -53,17 +53,12 @@ def text_similarity(text1, text2):
     return difflib.SequenceMatcher(None, norm1, norm2).ratio()
 
 def calculate_duplicate_matrix(comments):
-    """
-    Computes text similarity across all comments in the batch.
-    Uses length-bucketing and quick_ratio() pre-filtering to avoid
-    a full O(n^2) SequenceMatcher pass on large comment batches.
-    Returns a mapping of comment_id -> list of (other_comment_id, similarity_score).
-    """
     duplicates_map = {c["comment_id"]: [] for c in comments}
     normalized = [normalize_text_for_comparison(c.get("comment_text", "")) for c in comments]
 
     SIM_THRESHOLD = 0.70
-    BUCKET_SIZE = 10  # group comments by normalized length, in chunks of 10 chars
+    BUCKET_SIZE = 10
+    MAX_BUCKET_SPAN = 150  # hard cap — prevents runaway memory/CPU on huge similar-length clusters
 
     buckets = defaultdict(list)
     for i, norm in enumerate(normalized):
@@ -73,9 +68,13 @@ def calculate_duplicate_matrix(comments):
     checked_pairs = set()
 
     for bucket_key, idxs in buckets.items():
-        # Compare within this bucket AND the next one up (catches near-length-boundary matches)
         candidates = idxs + buckets.get(bucket_key + 1, [])
+        if len(candidates) > MAX_BUCKET_SPAN:
+            candidates = candidates[:MAX_BUCKET_SPAN]  # cap comparisons in oversized buckets
+
         for i in idxs:
+            if i not in candidates and i not in idxs[:MAX_BUCKET_SPAN]:
+                continue
             for j in candidates:
                 if j <= i:
                     continue
@@ -91,8 +90,6 @@ def calculate_duplicate_matrix(comments):
                     sim = 1.0
                 else:
                     matcher = difflib.SequenceMatcher(None, norm1, norm2)
-                    # Fast upper-bound check — skip the expensive ratio() call
-                    # entirely if it can't possibly clear the threshold
                     if matcher.quick_ratio() < SIM_THRESHOLD:
                         continue
                     sim = matcher.ratio()
@@ -100,8 +97,10 @@ def calculate_duplicate_matrix(comments):
                 if sim >= SIM_THRESHOLD:
                     c1, c2 = comments[i], comments[j]
                     id1, id2 = c1["comment_id"], c2["comment_id"]
-                    duplicates_map[id1].append({"id": id2, "author": c2.get("author_name"), "sim": round(sim, 2)})
-                    duplicates_map[id2].append({"id": id1, "author": c1.get("author_name"), "sim": round(sim, 2)})
+                    if len(duplicates_map[id1]) < 20:  # cap stored matches per comment too
+                        duplicates_map[id1].append({"id": id2, "author": c2.get("author_name"), "sim": round(sim, 2)})
+                    if len(duplicates_map[id2]) < 20:
+                        duplicates_map[id2].append({"id": id1, "author": c1.get("author_name"), "sim": round(sim, 2)})
 
     return duplicates_map
 
