@@ -66,7 +66,7 @@ def analyze_comments():
     video_info = fetched_data.get("video", {})
 
     # Hard cap to guarantee analysis completes reliably on free-tier hosting
-    ANALYSIS_CAP = 500
+    ANALYSIS_CAP = 1000
     total_fetched = len(raw_comments)
     if total_fetched > ANALYSIS_CAP:
         raw_comments = raw_comments[:ANALYSIS_CAP]
