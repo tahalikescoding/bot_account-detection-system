@@ -185,7 +185,7 @@ const App = {
         this.state.activeClusterId = null;
 
         // Render all UI components
-        this.renderVideoMeta(data.video, data.data_source, data.source_notice, data.analysis_note);;
+        this.renderVideoMeta(data.video, data.data_source, data.source_notice, data.analysis_note);
         this.render();
 
         Components.showToast(`Analyzed ${data.comments.length} comments successfully!`, 'success');
@@ -245,218 +245,219 @@ const App = {
         sourceEl.innerHTML += ` <span style="opacity:0.8; font-weight:400;">⚠️ ${Components.escapeHTML(analysisNote)}</span>`;
       }
     }
+  },
 
-    /**
-     * Main render trigger for all dashboard parts.
-     */
-    render(newlyInjectedIds = []) {
-      Components.renderSummaryStats(this.state.summary);
-      this.renderTable(newlyInjectedIds);
-      Components.renderClusters(this.state.clusters);
-      Explainability.render(this.state.explainability);
-    },
+  /**
+   * Main render trigger for all dashboard parts.
+   */
+  render(newlyInjectedIds = []) {
+    Components.renderSummaryStats(this.state.summary);
+    this.renderTable(newlyInjectedIds);
+    Components.renderClusters(this.state.clusters);
+    Explainability.render(this.state.explainability);
+  },
 
-    /**
-     * Filters, sorts, and renders the comment feed table.
-     */
-    renderTable(newlyInjectedIds = []) {
-      const tbody = document.getElementById("comment-feed-tbody");
-      const countEl = document.getElementById("feed-visible-count");
-      if (!tbody) return;
+  /**
+   * Filters, sorts, and renders the comment feed table.
+   */
+  renderTable(newlyInjectedIds = []) {
+    const tbody = document.getElementById("comment-feed-tbody");
+    const countEl = document.getElementById("feed-visible-count");
+    if (!tbody) return;
 
-      let filtered = [...this.state.comments];
+    let filtered = [...this.state.comments];
 
-      // Filter by cluster if active
-      if (this.state.activeClusterId) {
-        const cluster = this.state.clusters.find(c => c.cluster_id === this.state.activeClusterId);
-        if (cluster) {
-          const idSet = new Set(cluster.member_comment_ids);
-          filtered = filtered.filter(c => idSet.has(c.comment_id));
-        }
-      } else {
-        // Filter by verdict category
-        if (this.state.activeFilter === 'bot') {
-          filtered = filtered.filter(c => c.verdict_class === 'bot');
-        } else if (this.state.activeFilter === 'suspicious') {
-          filtered = filtered.filter(c => c.verdict_class === 'suspicious');
-        } else if (this.state.activeFilter === 'human') {
-          filtered = filtered.filter(c => c.verdict_class === 'human');
-        } else if (this.state.activeFilter === 'campaign') {
-          filtered = filtered.filter(c => c.is_in_campaign);
-        }
+    // Filter by cluster if active
+    if (this.state.activeClusterId) {
+      const cluster = this.state.clusters.find(c => c.cluster_id === this.state.activeClusterId);
+      if (cluster) {
+        const idSet = new Set(cluster.member_comment_ids);
+        filtered = filtered.filter(c => idSet.has(c.comment_id));
       }
-
-      // Filter by Search Query
-      if (this.state.searchQuery) {
-        const q = this.state.searchQuery;
-        filtered = filtered.filter(c =>
-          (c.author_name && c.author_name.toLowerCase().includes(q)) ||
-          (c.author_handle && c.author_handle.toLowerCase().includes(q)) ||
-          (c.comment_text && c.comment_text.toLowerCase().includes(q))
-        );
+    } else {
+      // Filter by verdict category
+      if (this.state.activeFilter === 'bot') {
+        filtered = filtered.filter(c => c.verdict_class === 'bot');
+      } else if (this.state.activeFilter === 'suspicious') {
+        filtered = filtered.filter(c => c.verdict_class === 'suspicious');
+      } else if (this.state.activeFilter === 'human') {
+        filtered = filtered.filter(c => c.verdict_class === 'human');
+      } else if (this.state.activeFilter === 'campaign') {
+        filtered = filtered.filter(c => c.is_in_campaign);
       }
-
-      // Sort Comments
-      if (this.state.sortBy === 'score_desc') {
-        filtered.sort((a, b) => b.bot_score - a.bot_score);
-      } else if (this.state.sortBy === 'score_asc') {
-        filtered.sort((a, b) => a.bot_score - b.bot_score);
-      } else if (this.state.sortBy === 'time_asc') {
-        filtered.sort((a, b) => new Date(b.published_at) - new Date(a.published_at));
-      } else if (this.state.sortBy === 'burst_fastest') {
-        filtered.sort((a, b) => (a.seconds_after_upload ?? 999999) - (b.seconds_after_upload ?? 999999));
-      }
-
-      if (countEl) {
-        countEl.textContent = `${filtered.length} visible (${this.state.comments.length} total)`;
-      }
-
-      if (filtered.length === 0) {
-        tbody.innerHTML = `
-        <tr>
-          <td colspan="7" class="table-empty">
-            No comments match current filter criteria.
-          </td>
-        </tr>
-      `;
-        return;
-      }
-
-      const injectedSet = new Set(newlyInjectedIds);
-      tbody.innerHTML = filtered.map(c =>
-        Components.renderCommentRow(c, injectedSet.has(c.comment_id))
-      ).join('');
-    },
-
-    /**
-     * Filters comment feed to highlight a specific coordinated campaign cluster.
-     */
-    filterByCluster(clusterId) {
-      this.state.activeClusterId = clusterId;
-      // Highlight active cluster card
-      document.querySelectorAll(".cluster-item").forEach(card => {
-        card.style.borderColor = card.id === `cluster-card-${clusterId}` ? 'var(--accent-purple)' : 'var(--border-subtle)';
-      });
-
-      this.renderTable();
-      Components.showToast(`Filtered feed to cluster: ${clusterId.toUpperCase()}`, 'info');
-
-      // Scroll to table smoothly
-      const tableEl = document.querySelector(".feed-panel");
-      if (tableEl) {
-        tableEl.scrollIntoView({ behavior: 'smooth' });
-      }
-    },
-
-    /**
-     * Opens the slide-over inspector for a specific comment.
-     */
-    openInspector(commentId) {
-      const comment = this.state.comments.find(c => c.comment_id === commentId);
-      if (!comment) return;
-
-      Components.renderInspector(comment);
-
-      const drawer = document.getElementById("inspector-drawer");
-      const backdrop = document.getElementById("drawer-backdrop");
-      if (drawer) drawer.classList.add("open");
-      if (backdrop) backdrop.classList.add("open");
-    },
-
-    /**
-     * Closes the inspector drawer.
-     */
-    closeInspector() {
-      const drawer = document.getElementById("inspector-drawer");
-      const backdrop = document.getElementById("drawer-backdrop");
-      if (drawer) drawer.classList.remove("open");
-      if (backdrop) backdrop.classList.remove("open");
-    },
-
-    /**
-     * Copies channel ID to clipboard.
-     */
-    copyChannelId(channelId) {
-      if (!channelId || channelId === 'N/A') {
-        Components.showToast('No channel ID available for this account.', 'warning');
-        return;
-      }
-      navigator.clipboard.writeText(channelId).then(() => {
-        Components.showToast(`Copied Channel ID ${channelId} to clipboard!`, 'success');
-      }).catch(() => {
-        Components.showToast('Failed to copy to clipboard.', 'warning');
-      });
-    },
-
-    /**
-     * Simulates moderation action (shadowban / flag).
-     */
-    simulateModeration(commentId) {
-      const idx = this.state.comments.findIndex(c => c.comment_id === commentId);
-      if (idx !== -1) {
-        const author = this.state.comments[idx].author_name;
-        Components.showToast(`Account "${author}" flagged for YouTube Studio moderation!`, 'danger');
-        this.closeInspector();
-      }
-    },
-
-    /**
-     * Exports flagged bot accounts to a JSON or CSV file download.
-     */
-    exportReport(format = 'json') {
-      const flagged = this.state.comments.filter(c => c.bot_score > 30);
-      if (flagged.length === 0) {
-        Components.showToast('No flagged bot accounts to export.', 'warning');
-        return;
-      }
-
-      let fileContent = '';
-      let mimeType = 'text/plain';
-      let fileName = `CommentGuard_Bot_Report_${new Date().toISOString().slice(0, 10)}`;
-
-      if (format === 'json') {
-        mimeType = 'application/json';
-        fileName += '.json';
-        fileContent = JSON.stringify({
-          exported_at: new Date().toISOString(),
-          video: this.state.video,
-          summary: this.state.summary,
-          clusters: this.state.clusters,
-          flagged_accounts: flagged
-        }, null, 2);
-      } else {
-        mimeType = 'text/csv';
-        fileName += '.csv';
-        const headers = ['Comment_ID', 'Author_Name', 'Handle', 'Channel_ID', 'Bot_Score', 'Verdict', 'In_Campaign', 'Comment_Text', 'Reasons'];
-        const rows = flagged.map(c => [
-          `"${c.comment_id}"`,
-          `"${(c.author_name || '').replace(/"/g, '""')}"`,
-          `"${(c.author_handle || '').replace(/"/g, '""')}"`,
-          `"${c.author_channel_id || ''}"`,
-          c.bot_score,
-          `"${c.verdict}"`,
-          c.is_in_campaign ? 'YES' : 'NO',
-          `"${(c.comment_text || '').replace(/"/g, '""')}"`,
-          `"${(c.reasons || []).join('; ').replace(/"/g, '""')}"`
-        ]);
-        fileContent = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
-      }
-
-      const blob = new Blob([fileContent], { type: mimeType });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = fileName;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-
-      Components.showToast(`Exported ${flagged.length} accounts as ${format.toUpperCase()}`, 'success');
     }
-  };
 
-  // Auto-run on DOM ready
-  document.addEventListener("DOMContentLoaded", () => {
-    App.init();
-  });
+    // Filter by Search Query
+    if (this.state.searchQuery) {
+      const q = this.state.searchQuery;
+      filtered = filtered.filter(c =>
+        (c.author_name && c.author_name.toLowerCase().includes(q)) ||
+        (c.author_handle && c.author_handle.toLowerCase().includes(q)) ||
+        (c.comment_text && c.comment_text.toLowerCase().includes(q))
+      );
+    }
+
+    // Sort Comments
+    if (this.state.sortBy === 'score_desc') {
+      filtered.sort((a, b) => b.bot_score - a.bot_score);
+    } else if (this.state.sortBy === 'score_asc') {
+      filtered.sort((a, b) => a.bot_score - b.bot_score);
+    } else if (this.state.sortBy === 'time_asc') {
+      filtered.sort((a, b) => new Date(b.published_at) - new Date(a.published_at));
+    } else if (this.state.sortBy === 'burst_fastest') {
+      filtered.sort((a, b) => (a.seconds_after_upload ?? 999999) - (b.seconds_after_upload ?? 999999));
+    }
+
+    if (countEl) {
+      countEl.textContent = `${filtered.length} visible (${this.state.comments.length} total)`;
+    }
+
+    if (filtered.length === 0) {
+      tbody.innerHTML = `
+      <tr>
+        <td colspan="7" class="table-empty">
+          No comments match current filter criteria.
+        </td>
+      </tr>
+    `;
+      return;
+    }
+
+    const injectedSet = new Set(newlyInjectedIds);
+    tbody.innerHTML = filtered.map(c =>
+      Components.renderCommentRow(c, injectedSet.has(c.comment_id))
+    ).join('');
+  },
+
+  /**
+   * Filters comment feed to highlight a specific coordinated campaign cluster.
+   */
+  filterByCluster(clusterId) {
+    this.state.activeClusterId = clusterId;
+    // Highlight active cluster card
+    document.querySelectorAll(".cluster-item").forEach(card => {
+      card.style.borderColor = card.id === `cluster-card-${clusterId}` ? 'var(--accent-purple)' : 'var(--border-subtle)';
+    });
+
+    this.renderTable();
+    Components.showToast(`Filtered feed to cluster: ${clusterId.toUpperCase()}`, 'info');
+
+    // Scroll to table smoothly
+    const tableEl = document.querySelector(".feed-panel");
+    if (tableEl) {
+      tableEl.scrollIntoView({ behavior: 'smooth' });
+    }
+  },
+
+  /**
+   * Opens the slide-over inspector for a specific comment.
+   */
+  openInspector(commentId) {
+    const comment = this.state.comments.find(c => c.comment_id === commentId);
+    if (!comment) return;
+
+    Components.renderInspector(comment);
+
+    const drawer = document.getElementById("inspector-drawer");
+    const backdrop = document.getElementById("drawer-backdrop");
+    if (drawer) drawer.classList.add("open");
+    if (backdrop) backdrop.classList.add("open");
+  },
+
+  /**
+   * Closes the inspector drawer.
+   */
+  closeInspector() {
+    const drawer = document.getElementById("inspector-drawer");
+    const backdrop = document.getElementById("drawer-backdrop");
+    if (drawer) drawer.classList.remove("open");
+    if (backdrop) backdrop.classList.remove("open");
+  },
+
+  /**
+   * Copies channel ID to clipboard.
+   */
+  copyChannelId(channelId) {
+    if (!channelId || channelId === 'N/A') {
+      Components.showToast('No channel ID available for this account.', 'warning');
+      return;
+    }
+    navigator.clipboard.writeText(channelId).then(() => {
+      Components.showToast(`Copied Channel ID ${channelId} to clipboard!`, 'success');
+    }).catch(() => {
+      Components.showToast('Failed to copy to clipboard.', 'warning');
+    });
+  },
+
+  /**
+   * Simulates moderation action (shadowban / flag).
+   */
+  simulateModeration(commentId) {
+    const idx = this.state.comments.findIndex(c => c.comment_id === commentId);
+    if (idx !== -1) {
+      const author = this.state.comments[idx].author_name;
+      Components.showToast(`Account "${author}" flagged for YouTube Studio moderation!`, 'danger');
+      this.closeInspector();
+    }
+  },
+
+  /**
+   * Exports flagged bot accounts to a JSON or CSV file download.
+   */
+  exportReport(format = 'json') {
+    const flagged = this.state.comments.filter(c => c.bot_score > 30);
+    if (flagged.length === 0) {
+      Components.showToast('No flagged bot accounts to export.', 'warning');
+      return;
+    }
+
+    let fileContent = '';
+    let mimeType = 'text/plain';
+    let fileName = `CommentGuard_Bot_Report_${new Date().toISOString().slice(0, 10)}`;
+
+    if (format === 'json') {
+      mimeType = 'application/json';
+      fileName += '.json';
+      fileContent = JSON.stringify({
+        exported_at: new Date().toISOString(),
+        video: this.state.video,
+        summary: this.state.summary,
+        clusters: this.state.clusters,
+        flagged_accounts: flagged
+      }, null, 2);
+    } else {
+      mimeType = 'text/csv';
+      fileName += '.csv';
+      const headers = ['Comment_ID', 'Author_Name', 'Handle', 'Channel_ID', 'Bot_Score', 'Verdict', 'In_Campaign', 'Comment_Text', 'Reasons'];
+      const rows = flagged.map(c => [
+        `"${c.comment_id}"`,
+        `"${(c.author_name || '').replace(/"/g, '""')}"`,
+        `"${(c.author_handle || '').replace(/"/g, '""')}"`,
+        `"${c.author_channel_id || ''}"`,
+        c.bot_score,
+        `"${c.verdict}"`,
+        c.is_in_campaign ? 'YES' : 'NO',
+        `"${(c.comment_text || '').replace(/"/g, '""')}"`,
+        `"${(c.reasons || []).join('; ').replace(/"/g, '""')}"`
+      ]);
+      fileContent = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+    }
+
+    const blob = new Blob([fileContent], { type: mimeType });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = fileName;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+
+    Components.showToast(`Exported ${flagged.length} accounts as ${format.toUpperCase()}`, 'success');
+  }
+};
+
+// Auto-run on DOM ready
+document.addEventListener("DOMContentLoaded", () => {
+  App.init();
+});
