@@ -7,6 +7,7 @@ similar account creation dates, or posting within narrow time windows.
 from datetime import datetime, timezone
 import re
 from bot_detector.scoring_engine import text_similarity, parse_datetime
+import difflib
 
 
 def detect_campaign_clusters(scored_comments):
@@ -29,7 +30,8 @@ def detect_campaign_clusters(scored_comments):
         c for c in scored_comments
         if c.get("bot_score", 0) >= 35 or len(c.get("duplicate_matches", [])) > 0
     ]
-
+    MAX_CLUSTER_CANDIDATES = 300  # hard cap to bound worst-case memory/CPU
+    candidates = candidates[:MAX_CLUSTER_CANDIDATES]
     # Graph-based clustering: connect accounts that share high similarity
     # or identical external URLs or very narrow posting burst with identical pattern
     n = len(candidates)
@@ -52,10 +54,15 @@ def detect_campaign_clusters(scored_comments):
             is_match = False
             for member in cluster_members:
                 # 1. Direct text similarity
-                sim = text_similarity(member.get("comment_text", ""), c_j.get("comment_text", ""))
-                if sim >= 0.65:
-                    is_match = True
-                    break
+                m_norm = member.get("comment_text", "").lower().strip()
+                cj_norm = c_j.get("comment_text", "").lower().strip()
+                if m_norm and cj_norm:
+                    quick_matcher = difflib.SequenceMatcher(None, m_norm, cj_norm)
+                    if quick_matcher.quick_ratio() >= 0.65:
+                        sim = text_similarity(member.get("comment_text", ""), c_j.get("comment_text", ""))
+                        if sim >= 0.65:
+                            is_match = True
+                            break
 
                 # 2. Shared link, telegram handle, or whatsapp
                 m_text = member.get("comment_text", "").lower()
