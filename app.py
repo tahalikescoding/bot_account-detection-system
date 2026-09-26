@@ -65,6 +65,12 @@ def analyze_comments():
     raw_comments = fetched_data.get("comments", [])
     video_info = fetched_data.get("video", {})
 
+    # Hard cap to guarantee analysis completes reliably on free-tier hosting
+    ANALYSIS_CAP = 500
+    total_fetched = len(raw_comments)
+    if total_fetched > ANALYSIS_CAP:
+        raw_comments = raw_comments[:ANALYSIS_CAP]
+
     # 1. Run through Bot Scoring Engine
     scoring_result = score_comment_batch(raw_comments)
     scored_comments = scoring_result["comments"]
@@ -94,7 +100,9 @@ def analyze_comments():
         "clusters": clusters,
         "explainability": explainability,
         "data_source": fetched_data.get("data_source", "mock_fallback"),
-        "source_notice": fetched_data.get("source_notice", "")
+        "source_notice": fetched_data.get("source_notice", ""),
+        "total_fetched": total_fetched,
+        "analysis_note": f"Analyzed the first {ANALYSIS_CAP} of {total_fetched} comments for performance." if total_fetched > ANALYSIS_CAP else None
     })
 
 
