@@ -58,7 +58,8 @@ def calculate_duplicate_matrix(comments):
 
     SIM_THRESHOLD = 0.70
     BUCKET_SIZE = 10
-    MAX_BUCKET_SPAN = 150  # hard cap — prevents runaway memory/CPU on huge similar-length clusters
+    MAX_BUCKET_SPAN = 150
+    MAX_FULL_COMPARISONS = 15000  # hard global ceiling on expensive ratio() calls
 
     buckets = defaultdict(list)
     for i, norm in enumerate(normalized):
@@ -66,15 +67,19 @@ def calculate_duplicate_matrix(comments):
             buckets[len(norm) // BUCKET_SIZE].append(i)
 
     checked_pairs = set()
+    full_comparison_count = 0
 
     for bucket_key, idxs in buckets.items():
+        if full_comparison_count >= MAX_FULL_COMPARISONS:
+            break
+
         candidates = idxs + buckets.get(bucket_key + 1, [])
         if len(candidates) > MAX_BUCKET_SPAN:
-            candidates = candidates[:MAX_BUCKET_SPAN]  # cap comparisons in oversized buckets
+            candidates = candidates[:MAX_BUCKET_SPAN]
 
         for i in idxs:
-            if i not in candidates and i not in idxs[:MAX_BUCKET_SPAN]:
-                continue
+            if full_comparison_count >= MAX_FULL_COMPARISONS:
+                break
             for j in candidates:
                 if j <= i:
                     continue
@@ -92,12 +97,15 @@ def calculate_duplicate_matrix(comments):
                     matcher = difflib.SequenceMatcher(None, norm1, norm2)
                     if matcher.quick_ratio() < SIM_THRESHOLD:
                         continue
+                    full_comparison_count += 1
+                    if full_comparison_count > MAX_FULL_COMPARISONS:
+                        break
                     sim = matcher.ratio()
 
                 if sim >= SIM_THRESHOLD:
                     c1, c2 = comments[i], comments[j]
                     id1, id2 = c1["comment_id"], c2["comment_id"]
-                    if len(duplicates_map[id1]) < 20:  # cap stored matches per comment too
+                    if len(duplicates_map[id1]) < 20:
                         duplicates_map[id1].append({"id": id2, "author": c2.get("author_name"), "sim": round(sim, 2)})
                     if len(duplicates_map[id2]) < 20:
                         duplicates_map[id2].append({"id": id1, "author": c1.get("author_name"), "sim": round(sim, 2)})
