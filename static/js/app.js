@@ -205,7 +205,7 @@ const App = {
   /**
    * Updates the video metadata bar.
    */
-  renderVideoMeta(video, dataSource, notice) {
+  renderVideoMeta(video, dataSource, notice, analysisNote) {
     if (!video) return;
 
     const thumbEl = document.getElementById("video-meta-thumb");
